@@ -1,0 +1,237 @@
+由 Universal Speech Solutions LLC 提供支持
+
+插件实现手册
+
+开发人员指南
+
+ 
+
+修订：49
+
+最后更新：2017 年 3 月 19 日
+
+创建者：Arsen Chaloyan
+
+
+ 
+
+目录
+
+1 � 概述
+
+1.1适用版本
+
+1.2安装和配置
+
+2.建筑
+
+3.结构
+
+4 � 接口
+
+4.1 ��������资源引擎接口
+
+4.2 ��������资源通道接口
+
+4.3音频流接口
+
+5参考文献
+
+5.1实施
+
+5.2文档
+
+ 
+
+ 
+
+1       概述
+本指南介绍如何在 UniMRCP 服务器中实现 MRCP 资源引擎插件。本文档仅提供基本步骤，并非完整参考。
+
+目标受众是熟悉 C/C++ 编程语言的语音应用程序开发人员。
+
+1.1      适用版本
+除非明确说明，本指南中提供的说明适用于以下版本。
+
+ 
+
+
+
+UniMRCP 1.0.0 及以上版本
+
+1.2      安装和配置
+有关库的安装和配置，请参阅安装指南和服务器配置指南。
+
+ 
+
+2       架构
+资源引擎插件是一个运行时可加载库，它使用第三方 ASR、TTS 或 SVI 引擎实现资源引擎接口。资源引擎接口基于异步事件驱动模型实现，并且与 MRCP v1 和 v2 一致。
+
+ 
+
+ 
+
+
+ 
+
+3       结构
+资源引擎插件必须使用以下辅助宏声明其版本号。
+
+ 
+
+MRCP_PLUGIN_版本_声明
+
+ 
+
+插件可以通过声明以下宏来声明服务器的日志记录例程。
+
+ 
+
+MRCP_PLUGIN_LOGGER_实现
+
+ 
+
+插件必须实现资源引擎的创建者函数，它是运行时可加载库的入口点。
+
+ 
+
+MRCP_PLUGIN_DECLARE（mrcp_engine_t *）mrcp_plugin_create（apr_pool_t *池）
+
+ 
+
+请注意，上述函数必须使用准确的签名和名称声明，以便在运行时动态找到和加载。
+
+ 
+
+4       接口
+该插件必须实现以下接口。
+
+4.1      资源引擎接口
+资源引擎是资源通道的集合。资源引擎在插件创建时创建，在插件卸载时销毁。需要在插件中实现资源引擎的以下方法。
+
+ 
+
+/** MRCP 引擎虚拟方法表 */
+
+结构 mrcp_engine_method_vtable_t {
+
+������ / ** 虚拟销毁 */
+
+apt_bool_t (*destroy)(mrcp_engine_t *engine);
+
+������ / ** 虚拟打开 */
+
+apt_bool_t (*open)(mrcp_engine_t *engine);
+
+������ / ** 虚拟关闭 */
+
+apt_bool_t (*close)(mrcp_engine_t *engine);
+
+������ / ** 虚拟通道创建 */
+
+������ mrcp_engine_channel_t* (*create_channel)(mrcp_engine_t *engine，apr_pool_t *pool);
+
+};
+
+ 
+
+4.2      资源通道接口
+资源通道在 MRCP 会话范围内创建，并随会话终止而销毁。需要在插件中实现资源通道的以下方法。
+
+ 
+
+/** 通道虚方法表 */
+
+结构 mrcp_engine_channel_method_vtable_t {
+
+������ / ** 虚拟销毁 */
+
+apt_bool_t (*destroy)(mrcp_engine_channel_t *channel);
+
+������ / ** 虚拟打开 */
+
+apt_bool_t (*open)(mrcp_engine_channel_t *channel);
+
+������ / ** 虚拟关闭 */
+
+apt_bool_t (*close)(mrcp_engine_channel_t *channel);
+
+������ / ** 虚拟进程请求 */
+
+apt_bool_t (*process_request)(mrcp_engine_channel_t *channel，mrcp_message_t *request);
+
+};
+
+ 
+
+请注意，从服务器收到的每个请求都必须由插件发送的一个且只有一个响应来确认。
+
+引擎通道的方法不得阻塞或保留可执行上下文。
+
+4.3      音频流接口
+需要实现音频流接口以便处理音频数据，例如从服务器到 ASR 引擎，或者反向从 TTS 引擎到服务器。
+
+ 
+
+/** 音频流虚拟方法表 */
+
+结构 mpf_audio_stream_vtable_t {
+
+������ / ** 虚拟销毁方法 */
+
+apt_bool_t (*destroy)(mpf_audio_stream_t *stream);
+
+ 
+
+������ / ** 虚拟打开接收器方法 */
+
+apt_bool_t (*open_rx)(mpf_audio_stream_t *stream，mpf_codec_t *codec);
+
+������ / ** 虚拟关闭接收器方法 */
+
+apt_bool_t (*close_rx)(mpf_audio_stream_t *stream);
+
+������ / ** 虚拟读取框架方法 */
+
+apt_bool_t (*read_frame)(mpf_audio_stream_t *stream, mpf_frame_t *frame);
+
+ 
+
+������ / ** 虚拟开放发射机方法 */
+
+apt_bool_t (*open_tx)(mpf_audio_stream_t *stream，mpf_codec_t *codec);
+
+������ / ** 虚拟关闭发射机方法 */
+
+apt_bool_t (*close_tx)(mpf_audio_stream_t *stream);
+
+������ / ** 虚拟写框架方法 */
+
+apt_bool_t (*write_frame)(mpf_audio_stream_t *stream，const mpf_frame_t *frame);
+
+ 
+
+������ / ** 虚拟跟踪方法 */
+
+������ void (*trace)(mpf_audio_stream_t *stream, mpf_stream_direction_e direction, apt_text_stream_t *output);
+
+};
+
+ 
+
+音频流的方法不得阻塞或保留可执行内容。
+
+5       参考文献
+5.1      实施
+� demo         -synth � 专为演示目的而构建的模拟合成器插件
+
+� demo         -recog � 仅为演示目的构建的模拟识别器插件
+
+� demo         -verifier � 仅为演示目的构建的模拟验证器插件
+
+� mrcp         -recorder � 仅用于演示目的的录音插件
+
+5.2      文档
+� UML         设计概念 � 客户端堆栈的层次结构、活动和序列图
+
+� API         参考 � 由 Doxygen 根据源代码生成的文档
